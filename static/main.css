@@ -1,0 +1,31 @@
+/* main.css */
+
+/* Basic reset for list styles */
+ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+}
+
+/* Container for two columns */
+.section-columns {
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Individual column styling */
+.column {
+  width: 48%;
+  margin: 1%; 
+}
+
+/* Style for URLs */
+.url-list a {
+  text-decoration: none;
+  color: blue;
+}
+
+/* Add a hover effect for URLs */
+.url-list a:hover {
+  text-decoration: underline;
+}
