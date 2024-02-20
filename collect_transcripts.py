@@ -34,8 +34,8 @@ def create_html_list_from_files(asset_type:str="audio", directory:str="assets") 
                                     key=lambda x: int(''.join(filter(str.isdigit, x[0])))
                                     )
                               )
-        html_output += f' | <a href="runit?type=audio&id={prefix}" target="_blank">Analyze</a></li>'
-    html_output += '</ul>'
+        html_output += f' | <a href="/transcriptions/{prefix}/analyze?category={asset_type}" target="_blank">Analyze</a></li>\n'
+    html_output += '</ul>\n'
 
     return html_output
 
