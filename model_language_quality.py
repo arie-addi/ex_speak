@@ -15,6 +15,7 @@ from sklearn.linear_model import LinearRegression
 import joblib
 import pickle
 import os.path
+import sys
 from model_util import ModelAlgos, ModelingStage, get_file_loc, model_labels
 
 # ------------------------------------------------------------------------------
@@ -33,215 +34,224 @@ class ModelLanguageQuality:
     def __init__(self, **kwargs):
         self.modeling_stage = kwargs.get('modeling_stage')
         self.training_data = kwargs.get('training_data')
+        self.test_data = kwargs.get('test_data', None)
+        self.asset = kwargs.get('asset', None)
         self.input_data = kwargs.get('input_data')
-        self.compare_data = kwargs.get('compare_data', None)
+        # self.compare_data = kwargs.get('compare_data', None)
         self.category = kwargs.get('category', None)
         self.target = kwargs.get('target')
-        self.model_name = kwargs.get('model_name', [])
+        self.model_choice = kwargs.get('model_choice', None)
         self.model_files = kwargs.get('model_files', {})
-        self.lin_regr_cols = kwargs.get('lin_regr_cols', {})
         self.sim_max_assets = kwargs.get('sim_max_assets', (200))
         self.start_time = time.asctime()
+        self.model_string = model_labels.get(self.model_choice)
 
-    def parse_training_input(self):
-        """ Any filtering or cleaning of training data should be done here """
-        logging.info(f"Parsing training file {self.training_data}")
-        df = pd.read_csv(self.training_data,
-                         sep=',', index_col=0, header=0,
+    # -------------------------------------------------------------------------
+
+    def parse_data_input(self, data):
+        """ Any filtering or cleaning of training/transcript data is done here """
+        logging.info(f"Parsing training or data file {data}")
+        df = pd.read_csv(data, sep=',', index_col=0, header=0,
             nrows=int(self.sim_max_assets)
         )
         logging.debug('_________________________________________________________')
         logging.debug(f"Length B4 filter: {len(df)}")
-        df_filter1 = df[(df['cohesion_avg'] < 6.0) | (df['vocab_avg'] < 6.0)]
-        assessment_columns = ['pronunciation_avg', 'vocab_avg', 'fluency_avg', 
+        if self.modeling_stage.name == 'TRAINING' or self.model_choice == ModelAlgos.CATBOOST_BL.name:
+            df_filter1 = df[(df['cohesion_avg'] < 6.0) | (df['vocab_avg'] < 6.0)]
+            assessment_columns = ['pronunciation_avg', 'vocab_avg', 'fluency_avg', 
                               'cohesion_avg', 'grammar_avg', 'cefr_avg']
+        else:
+            df_filter1 = df
+
         transcript_columns = ['question_1_transcript', 'question_2_transcript',
                    'question_3_transcript','question_4_transcript',
                    'question_5_transcript']
         self.df_transcript = df_filter1[transcript_columns]
         self.df_assessment = df_filter1[assessment_columns]
         logging.debug('_________________________________________________________')
-        logging.debug(f"Length After filter: {len(self.df)}")
-        logging.debug(self.df_transcript.info())
+        logging.debug(f"Length After filter: {len(self.df_transcript)}")
+        # logging.debug(self.df_transcript.info())
         logging.debug(self.df_assessment.head(5))
         # logging.debug(self.df_assessment.iloc[1:3])
         logging.debug(self.df_transcript.iloc[0:1])
-        logging.debug(f"Assessment Columns => [{','.join(self.df_assessment.columns.values)}]")
+        if len(self.df_assessment.columns.values) > 0:
+            logging.debug(f"Assessment Columns => [{','.join(self.df_assessment.columns.values)}]")
 
-    def run_training(self):
-        self.parse_training_input()
-        logging.info(f"Running training for Target '{self.target}'")
-        logging.debug(f"Evaluating assessments of type '{self.category}'")
-        # For sanity check of training, use assessment columns 
-        # df_train, df_test = train_test_split(self.df_transcript, test_size=0.2, random_state=1)
-        df_train, df_test = train_test_split(self.df_assessment, test_size=0.2, random_state=1)
-        logging.debug("size of training set vs size of test set", len(df_train), "/", len(df_test))
+    # -------------------------------------------------------------------------
+
+    def train_model(self):
+        # parse training input
+        self.parse_input(self.training_data)
+        logging.info(f"Running training {self.model_choice} for Target '{self.target}'")
+        logging.debug(f"Evaluating transcripts of type '{self.category}'")
+        # For sanity check of training, use assessment columns as baseline
+        if self.model_choice != ModelAlgos.CATBOOST_BL.name:
+            logging.debug(f"Trainging with model {self.model_choice} by using transcripts for {self.category}'")
+            df_train, df_test = train_test_split(self.df_transcript, test_size=0.2, random_state=1)
+            bl_string = ""
+        else:
+            logging.debug(f"Trainging for baseline values for {self.category}'")
+            df_train, df_test = train_test_split(self.df_assessment, test_size=0.2, random_state=1)
+            bl_string = "_BL"
+        logging.debug(f"size of training set vs size of test set {len(df_train)}/{len(df_test)}")
+
         # *** solve for 'target' ex. 'vocab_avg'
         y_train = df_train[self.target].values
         self.y_test = df_test[self.target].values
         del df_train[self.target]
         del df_test[self.target]
         X_train = df_train
-        X_test = df_test   
-        X_train.shape
+        self.X_test = df_test   
+        logging.debug(f"** Shape of X_train:\n{X_train.shape}")
 
-        # cb = CatBoostRegressor(n_estimators=1800, max_depth = 12, random_state=42)
-        cb = CatBoostRegressor(max_depth = 12, random_state=42)
-        cb.fit(X_train, y_train)
-        # Save the model to a file
-        joblib.dump(cb, f'data/cb_modelA_for_{self.target}.joblib')
-        print('Start Time: ', self.start_time)
-        print('End Time:', time.asctime())
+        # training_model = CatBoostRegressor(n_estimators=1800, max_depth = 12, random_state=42)
+        if self.model_string == 'CatBoost':
+            self.trainging_model = CatBoostRegressor(max_depth = 12, random_state=42)
+        else:
+            raise Exception(f"Unknown model {self.model_string}")
 
-    def evaluate_training(self):
-        logging.info(f"Evaulating training for Target '{self.target}'")
-        logging.debug(f"Evaluating assessments of type '{self.category}'")
+        self.trainging_model.fit(X_train, y_train)
+        fname = (
+                    f'data/model-{self.model_string}_'
+                    f'for-{self.target}_type-{self.category}{bl_string}.joblib'
+                )
+        # Save the trainging_model to a file
+        joblib.dump(self.trainging_model, fname)
+        logging.debug(f"Start Time: {self.start_time}")
+        logging.debug(f"End Time: {time.asctime()}")
 
-    def run_assessment_regression(self):
-        logging.info("Running assessment regression")
-        use_pkl_model = True
-        run_regression = True
-        fname = self.model_files.get(ModelAlgos.LINREGRESSION)
-        model_string = model_labels.get(ModelAlgos.LINREGRESSION)
+    # -------------------------------------------------------------------------
 
-        # Create a linear regression model and fit it to the data
-        if use_pkl_model and os.path.exists(fname):
-            run_regression = False
-        if run_regression:
-            # solve for missing values in y in 2nd column
-            # Split data into X and y
-            X = self.df_assessment[self.lin_regr_cols['predictor']].values.reshape(-1, 1)
-            y = self.df_assessment[self.lin_regr_cols['response']].values
-            logging.info(f"Creating model {model_string} using assessment predict")
-            model = LinearRegression().fit(X[~pd.isna(y)], y[~pd.isna(y)])
+    def run_model(self):
+        # run model and if relevant compare to baseline if comparing
+        logging.info(f"Running model for Target '{self.target}' of type '{self.category}'")
+        if self.test_data is not None:
+            test_set = get_file_loc(f'data/{self.test_data}')
+        else:
+            # retrieve training data, default is from initial dict., modelD in model_util.py
+            test_set = self.training_data
 
-        if use_pkl_model: 
-            if run_regression:
-                logging.info(f"Saving lin. regr. model to disk as {fname}")
-                # Save the model to disk
-                with open(fname, 'wb') as f:
-                    pickle.dump(model, f)
+        # if training_model object does not exist, than we need to setup our input
+        if not hasattr(self, 'training_model'):
+            self.parse_data_input(test_set)
+            if self.model_choice != ModelAlgos.CATBOOST_BL.name:
+                logging.debug(f"Evaluating with model {self.model_choice} by using transcripts for {self.category}'")
+                df_test = self.df_transcript
+                if self.target in self.df_assessment:
+                    self.y_test = self.df_assessment[self.target].values
+                bl_string = ""
             else:
-                # Load the model from disk
-                logging.info(f"Loading {model_string} model from disk")
-                with open(fname, 'rb') as f:
-                    model = pickle.load(f)
+                logging.debug(f"Evaluating for baseline values for '{self.category}'")
+                df_test = self.df_assessment
+                bl_string = "_BL"
+                self.y_test = df_test[self.target].values
+                del df_test[self.target]
+            self.X_test = df_test  # time periods missing evaluation_actual to solve for
+            assert self.model_files.get(self.model_choice) is not None, "Model file not found"
+            model_file = self.model_files[self.model_choice][self.target]
+            logging.debug(f"{self.model_string} is loading model from file {model_file}")
+            model = joblib.load(model_file)
+        else:
+            model = self.training_model
 
-        if self.input_data is not None:
-            logging.info(f"Predicting missing values in {self.input_data}")
-            df = pd.read_excel(self.input_data, skiprows=1,
-                              index_col=0, header=0,
-                nrows=int(self.sim_max_assets)
-            )
-            # TODO vs usecols="A:C"
-            # keep only the first three columns
-            dfw = df.iloc[:, [0, 1, 2]]
-            logging.debug("Length B4 assessment filter:", len(df))
-            dfw.columns = ['assessment_predicted', 'relative_humidity', 'pressure']
-            assessment_columns = ['assessment_predicted']
-            # assessment predict dataframe
-            df_assessment_fc = dfw.loc[:, assessment_columns]
-            # add an empty column 'y' to the DataFrame to solve for missing values
-            df_assessment_fc['y'] = pd.Series(dtype=float)
+        y_pred = model.predict(self.X_test)
+        y_pred = [round(num, 2) for num in y_pred]
+        self.df_results = pd.DataFrame(y_pred, index=self.X_test.index,
+                                  columns=['evaluation_predicted']
+                                  )
+        # if hasattr(self, 'df_test'):
+        #     self.df_results.join(self.df_test)
+        # if self.model_choice != ModelAlgos.CATBOOST_BL.name and hasattr(self.df_assessment):
+        #     self.df_results.join(self.df_assessment)
 
-            logging.debug(dfw.info())
-            logging.debug(dfw.head(4))
-            logging.debug(dfw.iloc[30:40])
-            X = df_assessment_fc[self.lin_regr_cols['predictor']].values.reshape(-1, 1)
-            y = df_assessment_fc['y'].values
+        # *AA TODO Update filename to accomadate multiple datasets 
+        results_fname = get_file_loc('data/run_results_' + self.target + bl_string + '.csv')
+        self.df_results.to_csv(results_fname)
+        baseline_pred = None 
+        logging.debug(f"Run results sent to {results_fname}")
 
-            # Use the model to predict the missing values of y
-            # get X values for rows that are missing y
-            X_missing = X[pd.isna(y)].reshape(-1, 1)
-            y_missing = model.predict(X_missing).round(2)
-
-            # Create a new DataFrame with the missing y values replaced by the predicted values
-            # TODO still need this to be a class variable or is local enough?
-            self.df_missing = df_assessment_fc[pd.isna(df_assessment_fc['y'])].copy()
-            self.df_missing['y'] = y_missing
-            # TODO remove this line after testing
-            self.df_assessment_fc = df_assessment_fc
-
-            # Print the updated data
-            logging.debug("len of df_missing:", len(self.df_missing))
-            logging.debug(self.df_missing.head(10))
-
-            # format input data for evaluation prediction
-            # dfw.insert(loc=0, column='assessment_actual', value=self.df_missing['y'])
-            dfw = dfw.join(self.df_missing['y'], how='left')
-            logging.debug('_________________________________________________________')
-            logging.debug('*** With updated Assessment Evaluation')
-            logging.debug("len dfw:", len(dfw))
-            logging.debug(dfw.info())
-            logging.debug(dfw.head(4))
-            logging.debug(dfw.iloc[30:40])
-            dfw.to_csv(get_file_loc('data/assessment_predictB.csv'))
-
-            # align columns with evaluation prediction columns
-            self.df_test = dfw.drop('assessment_predicted', axis=1).rename(columns={'y': 'assessment_actual'})
-            colA = self.df_test.pop('assessment_actual')
-            self.df_test.insert(0, colA.name, colA)
-            self.df_test['month'] = 5
-            self.df_test['hour'] = 23
-            logging.debug('_________________________________________________________')
-            logging.debug('*** Now prepped for evaluation prediction')
-            logging.debug("len self.df_test:", len(self.df_test))
-            logging.debug(self.df_test.info())
-            logging.debug(self.df_test.head(4))
-
-
-    def run_prediction(self):
-        logging.info("Running prediction")
-        y_test = None
-        if hasattr(self, 'df_test'):
-            X_test = self.df_test
-            if self.compare_data is not None:
-                dfc = pd.read_excel(self.compare_data, usecols=['evaluation_actual', 'evaluation_predicted'],
-                                index_col=0, header=0, 
+        # evaluate results when true values for target exist
+        if len(self.y_test) > 0 and self.asset is None:
+            logging.debug("Checking for baseline predictions")
+            # if exists retrieve/run baseline predictions for current dataset
+            # TODO add ability to recognize multiple datasets, run baseline model if new
+            if self.model_choice != ModelAlgos.CATBOOST_BL.name:
+                logging.debug("Retrieving baseline predictions")
+                baseline_data = get_file_loc('data/run_results_' + self.target + bl_string + '.csv')
+                # Filter df_baseline based on matching index rows in df_test
+                df_baseline = pd.read_csv(baseline_data, sep=',', index_col=0, header=0,
                     nrows=int(self.sim_max_assets)
                 )
-                logging.debug("dfc:", dfc.head(4))
-                logging.debug("len dfc:", len(dfc))
-                #  X = df_assessment_fc[self.lin_regr_cols['predictor']].values.reshape(-1, 1)
+                # align rows in baseline with same assessment id's
+                filtered_df = df_baseline.loc[df_baseline.index.isin(self.X_test.index), :]
+                baseline_pred = filtered_df['evaluation_predicted'].values
+                if len(baseline_pred) == 0:
+                    logging.debug(f"No baseline_predict values found")
+                    baseline_pred = None
+                
+            self.evaluate_results(y_pred, baseline_pred)
 
-        else:
-            df_train, self.df_test = train_test_split(
-                self.df, test_size=0.2, random_state=1)
-            y_test = self.df_test.evaluation_actual.values  # used to validate the model
-            del self.df_test['evaluation_actual']
-            X_test = self.df_test  # time periods missing evaluation_actual to solve for
+    # -------------------------------------------------------------------------
 
-        logging.debug("Shape of X_test:", X_test.shape)
-        # assert(self.model_files.get(self.model_name) is not None, "Model file not found")
-        if not isinstance(self.model_name, list):
-            self.model_name = [self.model_name]
-        for model in self.model_name:
-            fname = self.model_files.get(model)
-            model_string = model_labels.get(model)
-            df = joblib.load(self.model_files.get(model))
-            y_pred = df.predict(X_test)  # returns results of prediction
-            self.df_results = pd.DataFrame(y_pred, index=X_test.index,
-                                      columns=['evaluation_predicted'])
-            self.df_results.join(self.df_test)
-            self.df_results.to_csv(get_file_loc('data/pp_resultsB.csv'))
-            logging.debug('_________________________________________________________')
-            logging.debug('*** evaluation Prediction')
-            logging.debug("len self.df_results:", len(self.df_test))
-            logging.debug(self.df_results.info())
-            logging.debug(self.df_results.head(4))
+    def evaluate_results(self, y_pred, baseline_pred):
+        logging.info(f"Evaluating model on '{self.category}'")
 
-            if y_test is not None:
-                # validate the model
-                mae = mean_absolute_error(y_pred, y_test)
-                mse = mean_squared_error(y_pred, y_test)
-                rmse = np.sqrt(mse)
-                nrmse = rmse/(max(y_test)-min(y_test))
-                logging.info('_________________________________________________________')
-                logging.info(f">  Loading Model Prediction {model_string} with {fname} at", time.asctime())
-                logging.info('Mean Absolute Error (MAE): %.3f' % mae)
-                logging.info('Mean Squared Error (MSE): %.3f' % mse)
-                logging.info('Root Mean Squared Error (RMSE): %.3f' % rmse)
-                logging.info('Normalized Root Mean Squared Error (NRMSE): %.3f' % nrmse)
+        analyze_resultsH = {'Model Prediction vs Actual': y_pred, 
+            'Baseline Prediction vs Actual' : baseline_pred
+        }
+        for cmp_type, results in analyze_resultsH.items():
+            if results is None:
+                continue
+            # evaluate model results 
+            mae = mean_absolute_error(results, self.y_test)
+            mse = mean_squared_error(results, self.y_test)
+            rmse = np.sqrt(mse)
+            nrmse = rmse/(max(self.y_test)-min(self.y_test))
+            logging.info('_________________________________________________________')
+            logging.info(f">  Loading {cmp_type} using model {self.model_string} when solving for {self.target} at {time.asctime()}")
+            logging.info(f'Mean Absolute Error (MAE): {mae:.3f}')
+            logging.info(f'Mean Squared Error (MSE): {mse:.3f}')
+            logging.info(f'Root Mean Squared Error (RMSE): {rmse:.3f}')
+            logging.info(f'Normalized Root Mean Squared Error (NRMSE): {nrmse:.3f}')
+
+            logging.info(f"min(results) = {round(min(results),2)}")
+            logging.info(f"max(results) = {round(max(results),2)}")
+            logging.info(f"min(self.y_test) = {round(min(self.y_test),2)}")
+            logging.info(f"max(self.y_test) = {round(max(self.y_test),2)}")
+
+        error_threshold = 10
+        counter=0
+        instance=[]
+        logging.debug("\n* Results out of range: actual vs predicted")
+        ttl_predicted = len(y_pred)
+        for i in range(ttl_predicted):
+            if abs((y_pred[i]-self.y_test[i])/y_pred[i]*100) >= error_threshold:
+                counter += 1
+                instance.append((self.y_test[i],y_pred[i]))
+                logging.debug(f"{self.y_test[i]} vs {y_pred[i]}")
+        percent_over_threshold = round(counter/ttl_predicted *100, 1)
+        logging.info(f"----\nTotal predicted out of range ({error_threshold})% "
+                     f"or more of actual: {counter} out of {ttl_predicted} = "
+                     f"{percent_over_threshold}%")
+
+        logging.info("\n* Showing actual vs predicted results")
+        amnt_to_show = 8 
+        amnt_on_each_line = 8
+        logging.info(f"   - First {amnt_to_show}")
+        log_strings = list() 
+        for i in range(amnt_to_show):
+            log_strings.append(f"{self.y_test[i]}/{round(y_pred[i],2)}")
+            if (i +1) % amnt_on_each_line == 0:
+                logging.info(", ".join(log_strings))
+                log_strings = list() 
+            
+        logging.info(f"   - Last {amnt_to_show}")
+        log_strings = list() 
+        for i, (t, p) in enumerate(zip(self.y_test[-(amnt_to_show):], y_pred[-(amnt_to_show):])):
+            log_strings.append(f"{t}/{round(p,2)}")
+            if (i +1) % amnt_on_each_line == 0:
+                logging.info(", ".join(log_strings))
+                log_strings = list() 
 
     def upload_results(self):
         logging.info("Uploading results to database")
