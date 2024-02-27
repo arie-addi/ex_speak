@@ -3,7 +3,7 @@
 
 # set -e
 
-alias start_docker_shell='docker exec -it main-bash-1 sh'
+# alias start_docker_shell='docker exec -it main-bash-1 sh'
 
 cat << EOF
 Running Docker Compose with 2 containers: 
@@ -20,16 +20,22 @@ echo "*** Docker Startup Complete"
 echo -e "\n-------------------------------------\n"
 
 cat << EOF
-*** The Web Server can be reach at http://localhost:8000
-*** The Bash Shell can be reached by running the command:
-    $ docker exec -it main-bash-1 sh
-          or use the alias
-    $ start_docker_shell
+*** The Web Server can be reached at http://localhost:8000
+
+*** To attach to the FastAPI console, run the command:
+    $ docker attach main-web-1
 
 *** To view the FastAPI logs, run the command:
     $ docker compose logs web
 
-*** To close docker, run cmd:
+*** To attach to the Bash Shell run the command:
+    $ docker attach main-bash-1
+
+*** To start another shell session, run the command:
+    $ docker exec -it main-bash-1 sh
+
+*** To close all docker containers, run cmd:
     $ docker compose down
+
 EOF
 

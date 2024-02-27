@@ -13,7 +13,7 @@ def cli():
 
 @cli.command()
 @click.option('--category', type=str, default='text', help='Category to evaluate: audio or text')
-@click.option('--model', type=str, default='CATBOOST_BL', help='Model to use')
+@click.option('--model', type=str, default='CATBOOST', help='Model to use')
 @click.option('--asset', type=str, default=None, help='Name of specific asset to analyze')
 @click.option('--target', default="vocab_avg", type=str, help='Target variable desired to predict')
 @click.option('--test_data', default=None, type=str, help='Name of csv file to test')
@@ -36,7 +36,9 @@ def analyze(category, model, asset, target, test_data, eval_model, log_level):
         modelD['test_data'] = test_data
     modelO = ModelLanguageQuality(**modelD)
     # modelO.run_prediction()
-    modelO.run_model()
+    res = modelO.run_model()
+    if asset is not None:
+        print(res)
     logging.debug("Done with analyze()")
 
 @cli.command()

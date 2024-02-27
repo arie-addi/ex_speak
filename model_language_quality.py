@@ -185,12 +185,13 @@ class ModelLanguageQuality:
         logging.debug(f"Run results sent to {results_fname}")
         # {'id':f'{t_id}', 'category':f'{category}', 'vocab_avg':4.5,'fluency_avg':4,'grammar_avg':3.2, 'cefr_avg':4.2}
         if self.asset_id:
+            # return json result for specific assessment
             asset_result = { 'id': int(self.asset_id), 'category': self.category, 
                             self.target: self.df_results.loc[int(self.asset_id), 'evaluation_predicted']
                             # self.target: self.df_results.iloc[0,0]
                             }
-            print(json.dumps(asset_result))
-            return
+
+            return(asset_result)
 
         baseline_pred = None 
         # evaluate results when true values for target exist

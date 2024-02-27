@@ -2,10 +2,12 @@
 
 from fastapi import FastAPI, Request, HTTPException
 from fastapi import Query, Path
-from fastapi.responses import HTMLResponse, FileResponse
+from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 # RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from datetime import datetime, date
+from model_util import modelD
+from model_language_quality import ModelLanguageQuality
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -23,13 +25,27 @@ async def get_home_page():
 @app.get("/transcriptions/{t_id}/analyze")
 async def analyze_transcription(
     t_id: int = Path(..., title="Transcription ID", description="Transcription ID to analyze"),
-    category: str = Query(..., title="Transcription Category", description="Transcription category is audio or text")
+    category: str = Query(..., title="Transcription Category", description="Transcription category is audio or text"),
+    model: str = Query(default='CATBOOST', title="Model to run", description="Model to evaluate selected asset"),
+    target: str = Query(default='vocab_avg', title="Criteria to evaluate", description="Criteria to evaluate ex. 'vocab_avg'"),
+    test_data: str = Query(default=None, title="Test Data File", description="Use this csv file to run model on")
     ):
     if category not in [ 'audio', 'text']:
         raise HTTPException(status_code=400, detail=(f"Transcription category '{category}' invalid. "
                                                      "Choose 'audio' or 'text' ")
         )
-    return {'id':f'{t_id}', 'category':f'{category}', 'vocab_avg':4.5,'fluency_avg':4,'grammar_avg':3.2, 'cefr_avg':4.2}
+    # see default values in global modelD dict. definition
+    modelD['asset'] = t_id
+    modelD['category'] = category
+    modelD['model_choice'] = model
+    modelD['target'] = target
+    modelD['modeling_stage'] = 2 # predict stage
+    if test_data:
+        modelD['test_data'] = test_data
+
+    modelO = ModelLanguageQuality(**modelD)
+    result = modelO.run_model()
+    return JSONResponse(content=result)
 
 @app.get("/favicon.ico", response_class=FileResponse)
 async def get_favicon():
