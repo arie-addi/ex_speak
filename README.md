@@ -12,6 +12,10 @@ A major focus of my coding focused on establishing a python class that would be 
 
  - Docker https://docs.docker.com/engine/installation/
  - Docker Compose https://docs.docker.com/compose/install/
+ - Initial files in directories data/ assets/ and static/
+ - Training must be performed before running model unless `joblib` file exists for specific model
+
+Note: A tar file can be downloaded to create most of the default data files
 
 ## Usage
 
@@ -101,3 +105,10 @@ Note: The default values in the command line arguments are controlled by:
    - @click.option() lines in file `main_cli.py`
    - in __init__ constructor method in class `ModelLanguageQuality`
 
+Overview of Files Used
+
+`model_language_quality.py` - class where all the functionality for training and running models can be found
+`model_util.py` - basic data structures for configuration as well as generic functions defined
+`main_cli.py` - CLI for initializing class `ModelLanguageQuality`
+`main.py` - REST API for FastAPI initializing as well class `ModelLanguageQuality`
+`collect_transcripts.py` - Util to create static index page based on transcript files that exist in directories `/audio` and `/text`
