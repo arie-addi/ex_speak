@@ -4,6 +4,7 @@
 
 import os.path
 from enum import Enum
+import zlib
 
 class ModelingStage(Enum):
     TRAINING = 1
@@ -35,8 +36,14 @@ def get_file_loc(location):
     else:
         return os.path.join(g_this_dir, location)
 
+def crc32_hash(text):
+    if isinstance(text, str):
+        return zlib.crc32(text.encode())
+    else:
+        return text
 
 # -----------------------------
+
 model_labels = {
     "CATBOOST": 'CatBoost',
     "RANDOMFOREST": 'Random Forest',
@@ -54,7 +61,7 @@ modelD = {
     # 'compare_data': get_file_loc('data/load_results.xlsx'),
     'model_files': {
         'CATBOOST': {
-            'vocab_avg' : get_file_loc('data/_modelAA.joblib')
+            'vocab_avg' : get_file_loc('data/model-CatBoost_for-vocab_avg_type-text.joblib')
             },
         'RANDOMFOREST': {
             'vocab_avg' : get_file_loc('data/rf_modelA.joblib'),

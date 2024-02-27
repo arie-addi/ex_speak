@@ -3,34 +3,9 @@
 import os.path
 import click
 import logging
-from model_util import ModelAlgos, ModelingStage, get_file_loc, model_labels
+from model_util import ModelAlgos, ModelingStage, get_file_loc 
+from model_util import model_labels, modelD
 from model_language_quality import ModelLanguageQuality
-
-# model Dictionary
-modelD = {
-    'training_data': get_file_loc('data/SpeakNow_test_data.csv'),
-    # 'training_data': get_file_loc('data/speak_first_4.csv'),
-    'training_audio' : get_file_loc('assets/audio'),
-    'training_text' : get_file_loc('assets/text'),
-    'input_data': get_file_loc('data/language_hints.csv'),
-    # 'compare_data': get_file_loc('data/load_results.xlsx'),
-    'model_files': {
-        'CATBOOST': {
-            'vocab_avg' : get_file_loc('data/_modelAA.joblib')
-            },
-        'RANDOMFOREST': {
-            'vocab_avg' : get_file_loc('data/rf_modelA.joblib'),
-            },
-        'LINREGRESSION': {
-            'vocab_avg' : get_file_loc('data/lr_temp_modelA.pkl')
-            },
-        'CATBOOST_BL': {
-            'vocab_avg' : get_file_loc('data/model-CatBoost_for-vocab_avg_type-text_BL.joblib')
-            },
-    },
-}
-
-# -----------------------------
 
 @click.group()
 def cli():

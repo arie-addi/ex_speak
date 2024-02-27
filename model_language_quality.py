@@ -3,6 +3,7 @@
 # %%
 import numpy as np
 import pandas as pd
+import json
 import random
 import time
 import logging
@@ -16,7 +17,8 @@ import joblib
 import pickle
 import os.path
 import sys
-from model_util import ModelAlgos, ModelingStage, get_file_loc, model_labels
+from model_util import ModelAlgos, ModelingStage
+from model_util import get_file_loc, crc32_hash, model_labels
 
 # ------------------------------------------------------------------------------
 #  MAIN_CLASS
@@ -35,7 +37,7 @@ class ModelLanguageQuality:
         self.modeling_stage = kwargs.get('modeling_stage')
         self.training_data = kwargs.get('training_data')
         self.test_data = kwargs.get('test_data', None)
-        self.asset = kwargs.get('asset', None)
+        self.asset_id = kwargs.get('asset', None)
         self.input_data = kwargs.get('input_data')
         # self.compare_data = kwargs.get('compare_data', None)
         self.category = kwargs.get('category', None)
@@ -56,41 +58,48 @@ class ModelLanguageQuality:
         )
         logging.debug('_________________________________________________________')
         logging.debug(f"Length B4 filter: {len(df)}")
-        if self.modeling_stage.name == 'TRAINING' or self.model_choice == ModelAlgos.CATBOOST_BL.name:
-            df_filter1 = df[(df['cohesion_avg'] < 6.0) | (df['vocab_avg'] < 6.0)]
-            assessment_columns = ['pronunciation_avg', 'vocab_avg', 'fluency_avg', 
-                              'cohesion_avg', 'grammar_avg', 'cefr_avg']
-        else:
-            df_filter1 = df
-
         transcript_columns = ['question_1_transcript', 'question_2_transcript',
                    'question_3_transcript','question_4_transcript',
                    'question_5_transcript']
+        assessment_columns = ['pronunciation_avg', 'vocab_avg', 'fluency_avg', 
+                            'cohesion_avg', 'grammar_avg', 'cefr_avg']
+        if 'cohesion_avg' in df.columns and 'vocab_avg' in df.columns:
+            df_filter1 = df[(df['cohesion_avg'] <= 6.0) | (df['vocab_avg'] <= 6.0)]
+        else:
+            assessment_columns = []
+            df_filter1 = df
+
+        # test if there are actual assessment columns like 'vocab_avg'
+        if assessment_columns:
+            transcript_columns.append(self.target)
         self.df_transcript = df_filter1[transcript_columns]
         self.df_assessment = df_filter1[assessment_columns]
         logging.debug('_________________________________________________________')
         logging.debug(f"Length After filter: {len(self.df_transcript)}")
         # logging.debug(self.df_transcript.info())
-        logging.debug(self.df_assessment.head(5))
+        # logging.debug(self.df_assessment.head(5))
         # logging.debug(self.df_assessment.iloc[1:3])
         logging.debug(self.df_transcript.iloc[0:1])
         if len(self.df_assessment.columns.values) > 0:
-            logging.debug(f"Assessment Columns => [{','.join(self.df_assessment.columns.values)}]")
+            logging.debug(f"parse_data_input(): Assessment Columns => [{','.join(self.df_assessment.columns.values)}]")
+        else:
+            logging.debug(f"parse_data_input(): No Assessment Columns found in dataset file {data}")
 
     # -------------------------------------------------------------------------
 
     def train_model(self):
         # parse training input
-        self.parse_input(self.training_data)
+        self.parse_data_input(self.training_data)
         logging.info(f"Running training {self.model_choice} for Target '{self.target}'")
         logging.debug(f"Evaluating transcripts of type '{self.category}'")
-        # For sanity check of training, use assessment columns as baseline
         if self.model_choice != ModelAlgos.CATBOOST_BL.name:
-            logging.debug(f"Trainging with model {self.model_choice} by using transcripts for {self.category}'")
+            logging.debug(f"Training with model {self.model_choice} by using transcripts for {self.category}'")
+            if self.model_choice == ModelAlgos.CATBOOST.name:
+                self.df_transcript = self.df_transcript.map(crc32_hash)
             df_train, df_test = train_test_split(self.df_transcript, test_size=0.2, random_state=1)
             bl_string = ""
         else:
-            logging.debug(f"Trainging for baseline values for {self.category}'")
+            logging.debug(f"Training for baseline values for {self.category}'")
             df_train, df_test = train_test_split(self.df_assessment, test_size=0.2, random_state=1)
             bl_string = "_BL"
         logging.debug(f"size of training set vs size of test set {len(df_train)}/{len(df_test)}")
@@ -104,19 +113,19 @@ class ModelLanguageQuality:
         self.X_test = df_test   
         logging.debug(f"** Shape of X_train:\n{X_train.shape}")
 
-        # training_model = CatBoostRegressor(n_estimators=1800, max_depth = 12, random_state=42)
         if self.model_string == 'CatBoost':
-            self.trainging_model = CatBoostRegressor(max_depth = 12, random_state=42)
+            # training_model = CatBoostRegressor(n_estimators=1800, max_depth = 12, random_state=42)
+            self.training_model = CatBoostRegressor(max_depth = 12, random_state=42)
         else:
             raise Exception(f"Unknown model {self.model_string}")
 
-        self.trainging_model.fit(X_train, y_train)
+        self.training_model.fit(X_train, y_train)
         fname = (
                     f'data/model-{self.model_string}_'
                     f'for-{self.target}_type-{self.category}{bl_string}.joblib'
                 )
-        # Save the trainging_model to a file
-        joblib.dump(self.trainging_model, fname)
+        # Save the training_model to a file
+        joblib.dump(self.training_model, fname)
         logging.debug(f"Start Time: {self.start_time}")
         logging.debug(f"End Time: {time.asctime()}")
 
@@ -128,22 +137,28 @@ class ModelLanguageQuality:
         if self.test_data is not None:
             test_set = get_file_loc(f'data/{self.test_data}')
         else:
-            # retrieve training data, default is from initial dict., modelD in model_util.py
+            # retrieve training data, default is from 'model_files' in initial dict., modelD, in model_util.py
             test_set = self.training_data
 
+        default_bl_string = '_BL' # baseline suffix in filename to rate results against
+        bl_string = ""
+        self.y_test = list()
         # if training_model object does not exist, than we need to setup our input
         if not hasattr(self, 'training_model'):
+            # get default dataset with actual assessment values
             self.parse_data_input(test_set)
             if self.model_choice != ModelAlgos.CATBOOST_BL.name:
-                logging.debug(f"Evaluating with model {self.model_choice} by using transcripts for {self.category}'")
-                df_test = self.df_transcript
+                logging.debug(f"Evaluating with model {self.model_choice} by using {self.category} transcripts")
+                if self.model_choice != ModelAlgos.CATBOOST.name:
+                    df_test = self.df_transcript
+                else:
+                    df_test = self.df_transcript.map(crc32_hash)
                 if self.target in self.df_assessment:
                     self.y_test = self.df_assessment[self.target].values
-                bl_string = ""
             else:
                 logging.debug(f"Evaluating for baseline values for '{self.category}'")
                 df_test = self.df_assessment
-                bl_string = "_BL"
+                bl_string = default_bl_string
                 self.y_test = df_test[self.target].values
                 del df_test[self.target]
             self.X_test = df_test  # time periods missing evaluation_actual to solve for
@@ -167,17 +182,25 @@ class ModelLanguageQuality:
         # *AA TODO Update filename to accomadate multiple datasets 
         results_fname = get_file_loc('data/run_results_' + self.target + bl_string + '.csv')
         self.df_results.to_csv(results_fname)
-        baseline_pred = None 
         logging.debug(f"Run results sent to {results_fname}")
+        # {'id':f'{t_id}', 'category':f'{category}', 'vocab_avg':4.5,'fluency_avg':4,'grammar_avg':3.2, 'cefr_avg':4.2}
+        if self.asset_id:
+            asset_result = { 'id': int(self.asset_id), 'category': self.category, 
+                            self.target: self.df_results.loc[int(self.asset_id), 'evaluation_predicted']
+                            # self.target: self.df_results.iloc[0,0]
+                            }
+            print(json.dumps(asset_result))
+            return
 
+        baseline_pred = None 
         # evaluate results when true values for target exist
-        if len(self.y_test) > 0 and self.asset is None:
+        if len(self.y_test) > 0 and self.asset_id is None:
             logging.debug("Checking for baseline predictions")
             # if exists retrieve/run baseline predictions for current dataset
             # TODO add ability to recognize multiple datasets, run baseline model if new
             if self.model_choice != ModelAlgos.CATBOOST_BL.name:
                 logging.debug("Retrieving baseline predictions")
-                baseline_data = get_file_loc('data/run_results_' + self.target + bl_string + '.csv')
+                baseline_data = get_file_loc('data/run_results_' + self.target + default_bl_string + '.csv')
                 # Filter df_baseline based on matching index rows in df_test
                 df_baseline = pd.read_csv(baseline_data, sep=',', index_col=0, header=0,
                     nrows=int(self.sim_max_assets)
@@ -185,6 +208,7 @@ class ModelLanguageQuality:
                 # align rows in baseline with same assessment id's
                 filtered_df = df_baseline.loc[df_baseline.index.isin(self.X_test.index), :]
                 baseline_pred = filtered_df['evaluation_predicted'].values
+                logging.debug(f"len y_pred vs baseline_pred => {len(y_pred)}/{len(baseline_pred)}")
                 if len(baseline_pred) == 0:
                     logging.debug(f"No baseline_predict values found")
                     baseline_pred = None
