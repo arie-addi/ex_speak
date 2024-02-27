@@ -22,7 +22,7 @@ app.mount("/assets/text", StaticFiles(directory="assets/text"), name="text")
 async def get_home_page():
     return "static/index.html"
 
-@app.get("/transcriptions/{t_id}/analyze")
+@app.get("/transcriptions/{t_id}/analyze", response_class=JSONResponse)
 async def analyze_transcription(
     t_id: int = Path(..., title="Transcription ID", description="Transcription ID to analyze"),
     category: str = Query(..., title="Transcription Category", description="Transcription category is audio or text"),
@@ -42,14 +42,17 @@ async def analyze_transcription(
     modelD['modeling_stage'] = 2 # predict stage
     if test_data:
         modelD['test_data'] = test_data
-
     modelO = ModelLanguageQuality(**modelD)
-    result = modelO.run_model()
-    return JSONResponse(content=result)
+    # result = modelO.run_model()
+    return modelO.run_model()
 
 @app.get("/favicon.ico", response_class=FileResponse)
 async def get_favicon():
     return "static/favicon.ico"
+
+@app.get("/api", response_class=JSONResponse)
+async def test_api():
+	return {"message":"Hello World"}
 
 @app.get("/my_test", response_class=FileResponse)
 async def read_test_req():

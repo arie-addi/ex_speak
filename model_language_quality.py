@@ -44,7 +44,7 @@ class ModelLanguageQuality:
         self.target = kwargs.get('target')
         self.model_choice = kwargs.get('model_choice', None)
         self.model_files = kwargs.get('model_files', {})
-        self.sim_max_assets = kwargs.get('sim_max_assets', (200))
+        self.sim_max_assets = kwargs.get('sim_max_assets', (2000))
         self.start_time = time.asctime()
         self.model_string = model_labels.get(self.model_choice)
 
