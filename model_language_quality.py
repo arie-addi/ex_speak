@@ -202,7 +202,7 @@ class ModelLanguageQuality:
             logging.debug("Checking for baseline predictions")
             # if exists retrieve/run baseline predictions for current dataset
             # TODO add ability to recognize multiple datasets, run baseline model if new
-            if self.model_choice == ModelAlgos.CATBOOST_BL.name:
+            if self.model_choice != ModelAlgos.CATBOOST_BL.name:
                 logging.debug("Retrieving baseline predictions")
                 baseline_data = get_file_loc('data/run_results_' + self.target + default_bl_string + '.csv')
                 # Filter df_baseline based on matching index rows in df_test
