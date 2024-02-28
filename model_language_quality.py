@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # %%
+from matplotlib import category
 import numpy as np
 import pandas as pd
 import json
@@ -47,6 +48,7 @@ class ModelLanguageQuality:
         self.sim_max_assets = kwargs.get('sim_max_assets', (2000))
         self.start_time = time.asctime()
         self.model_string = model_labels.get(self.model_choice)
+        self.y_test = list()
 
     # -------------------------------------------------------------------------
 
@@ -142,7 +144,7 @@ class ModelLanguageQuality:
 
         default_bl_string = '_BL' # baseline suffix in filename to rate results against
         bl_string = ""
-        self.y_test = list()
+        
         # if training_model object does not exist, than we need to setup our input
         if not hasattr(self, 'training_model'):
             # get default dataset with actual assessment values
@@ -185,6 +187,7 @@ class ModelLanguageQuality:
         logging.debug(f"Run results sent to {results_fname}")
         # {'id':f'{t_id}', 'category':f'{category}', 'vocab_avg':4.5,'fluency_avg':4,'grammar_avg':3.2, 'cefr_avg':4.2}
         if self.asset_id:
+            logging.debug(f"Retrieving specific asset ID {self.asset_id}")
             # return json result for specific assessment
             asset_result = { 'id': int(self.asset_id), 'category': self.category, 
                             self.target: self.df_results.loc[int(self.asset_id), 'evaluation_predicted']
@@ -199,7 +202,7 @@ class ModelLanguageQuality:
             logging.debug("Checking for baseline predictions")
             # if exists retrieve/run baseline predictions for current dataset
             # TODO add ability to recognize multiple datasets, run baseline model if new
-            if self.model_choice != ModelAlgos.CATBOOST_BL.name:
+            if self.model_choice == ModelAlgos.CATBOOST_BL.name:
                 logging.debug("Retrieving baseline predictions")
                 baseline_data = get_file_loc('data/run_results_' + self.target + default_bl_string + '.csv')
                 # Filter df_baseline based on matching index rows in df_test

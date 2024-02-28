@@ -45,7 +45,7 @@ def generate_html(subdir1, subdir2):
     html_list2 = create_html_list_from_files('text', subdir2)
 
     title = "Analyze Candidate"
-    intro_paragraph = "This page presents the analysis of candidates from the following categories."
+    intro_paragraph = "This page presents the list of sample recordings and transcripts of candidates to analyze."
 
     # HTML structure
     html_content = f"""
@@ -78,6 +78,8 @@ def generate_html(subdir1, subdir2):
 
 def save_html(html_content, output_path='static/index.html'):
     """Save the HTML content to a file."""
+    if not os.path.exists('static'):
+        os.makedirs('static')
     with open(output_path, 'w') as file:
         file.write(html_content)
 

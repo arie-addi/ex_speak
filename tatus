@@ -1,0 +1,104 @@
+[1mdiff --git a/collect_transcripts.py b/collect_transcripts.py[m
+[1mindex b18626f..9475520 100755[m
+[1m--- a/collect_transcripts.py[m
+[1m+++ b/collect_transcripts.py[m
+[36m@@ -45,7 +45,7 @@[m [mdef generate_html(subdir1, subdir2):[m
+     html_list2 = create_html_list_from_files('text', subdir2)[m
+ [m
+     title = "Analyze Candidate"[m
+[31m-    intro_paragraph = "This page presents the analysis of candidates from the following categories."[m
+[32m+[m[32m    intro_paragraph = "This page presents the list of sample recordings and transcripts of candidates to analyze."[m
+ [m
+     # HTML structure[m
+     html_content = f"""[m
+[36m@@ -78,6 +78,8 @@[m [mdef generate_html(subdir1, subdir2):[m
+ [m
+ def save_html(html_content, output_path='static/index.html'):[m
+     """Save the HTML content to a file."""[m
+[32m+[m[32m    if not os.path.exists('static'):[m
+[32m+[m[32m        os.makedirs('static')[m
+     with open(output_path, 'w') as file:[m
+         file.write(html_content)[m
+ [m
+[36m@@ -88,4 +90,4 @@[m [mdef save_html(html_content, output_path='static/index.html'):[m
+ if __name__ == '__main__':[m
+ [m
+     html_content = generate_html('assets/audio', 'assets/text')[m
+[31m-    save_html(html_content)[m
+\ No newline at end of file[m
+[32m+[m[32m    save_html(html_content)[m
+[1mdiff --git a/model_language_quality.py b/model_language_quality.py[m
+[1mindex 9ca2c70..f8b3834 100755[m
+[1m--- a/model_language_quality.py[m
+[1m+++ b/model_language_quality.py[m
+[36m@@ -1,6 +1,7 @@[m
+ #!/usr/bin/env python3[m
+ [m
+ # %%[m
+[32m+[m[32mfrom matplotlib import category[m
+ import numpy as np[m
+ import pandas as pd[m
+ import json[m
+[36m@@ -47,6 +48,7 @@[m [mclass ModelLanguageQuality:[m
+         self.sim_max_assets = kwargs.get('sim_max_assets', (2000))[m
+         self.start_time = time.asctime()[m
+         self.model_string = model_labels.get(self.model_choice)[m
+[32m+[m[32m        self.y_test = list()[m
+ [m
+     # -------------------------------------------------------------------------[m
+ [m
+[36m@@ -142,7 +144,7 @@[m [mclass ModelLanguageQuality:[m
+ [m
+         default_bl_string = '_BL' # baseline suffix in filename to rate results against[m
+         bl_string = ""[m
+[31m-        self.y_test = list()[m
+[32m+[m[41m        [m
+         # if training_model object does not exist, than we need to setup our input[m
+         if not hasattr(self, 'training_model'):[m
+             # get default dataset with actual assessment values[m
+[36m@@ -185,6 +187,7 @@[m [mclass ModelLanguageQuality:[m
+         logging.debug(f"Run results sent to {results_fname}")[m
+         # {'id':f'{t_id}', 'category':f'{category}', 'vocab_avg':4.5,'fluency_avg':4,'grammar_avg':3.2, 'cefr_avg':4.2}[m
+         if self.asset_id:[m
+[32m+[m[32m            logging.debug(f"Retrieving specific asset ID {self.asset_id}")[m
+             # return json result for specific assessment[m
+             asset_result = { 'id': int(self.asset_id), 'category': self.category, [m
+                             self.target: self.df_results.loc[int(self.asset_id), 'evaluation_predicted'][m
+[36m@@ -199,7 +202,7 @@[m [mclass ModelLanguageQuality:[m
+             logging.debug("Checking for baseline predictions")[m
+             # if exists retrieve/run baseline predictions for current dataset[m
+             # TODO add ability to recognize multiple datasets, run baseline model if new[m
+[31m-            if self.model_choice != ModelAlgos.CATBOOST_BL.name:[m
+[32m+[m[32m            if self.model_choice == ModelAlgos.CATBOOST_BL.name:[m
+                 logging.debug("Retrieving baseline predictions")[m
+                 baseline_data = get_file_loc('data/run_results_' + self.target + default_bl_string + '.csv')[m
+                 # Filter df_baseline based on matching index rows in df_test[m
+[1mdiff --git a/start_docker.sh b/start_docker.sh[m
+[1mindex 0da472a..86ffbba 100755[m
+[1m--- a/start_docker.sh[m
+[1m+++ b/start_docker.sh[m
+[36m@@ -11,7 +11,11 @@[m [mRunning Docker Compose with 2 containers:[m
+    - bash shell "main-bash-1"[m
+ EOF[m
+ [m
+[32m+[m[32m# ./collect_transcripts.py[m
+[32m+[m[32m# creates a static index page to reference recordings and transcripts[m[41m [m
+[32m+[m[32m# in directories ./audio and ./text[m
+ set -x[m
+[32m+[m[32mpython3 ./collect_transcripts.py[m
+ docker compose up -d --build[m
+ docker ps[m
+ set +x[m
+[1mdiff --git a/static/index.html b/static/index.html[m
+[1mindex 74c1548..17971d8 100644[m
+[1m--- a/static/index.html[m
+[1m+++ b/static/index.html[m
+[36m@@ -9,7 +9,7 @@[m
+     </head>[m
+     <body>[m
+         <h1>Analyze Candidate</h1>[m
+[31m-        <p>This page presents the analysis of candidates from the following categories.</p>[m
+[32m+[m[32m        <p>This page presents the list of sample recordings and transcripts of candidates to analyze.</p>[m
+         <div class="section-columns">[m
+             <div class="column url-list">[m
+             <h2>audio</h2>[m

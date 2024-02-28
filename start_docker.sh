@@ -11,7 +11,11 @@ Running Docker Compose with 2 containers:
    - bash shell "main-bash-1"
 EOF
 
+# ./collect_transcripts.py
+# creates a static index page to reference recordings and transcripts 
+# in directories ./audio and ./text
 set -x
+python3 ./collect_transcripts.py
 docker compose up -d --build
 docker ps
 set +x
